@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>RXJS Product Search</title>
+  <script src="https://unpkg.com/@reactivex/rxjs@5.0.3/dist/global/Rx.js"></script>
+</head>
+
+<body>
+  Product Search
+  <input id="search" type="text">
+  <div id="searchresults">
+    <p>Type in search to get results</p>
+  </div>
+  <script>
+    // Simple API interface that returns observables for requests
+    class API {
+      // RXJS provides AJAX interface
+      suggest(term) {
+        return this.rawrequest(`/api/suggest/${term}`);
+      }
+
+      rawrequest(url) {
+        return Rx.Observable
+          .ajax(url) // Use AJAX interface
+          .map(e => e.response) // Get response
+          .retry(2) // Retry 2 additional times if fetching fails
+          .catch(error => console.log(error.message) || []); // Handle error after 2 retries
+      }
+    };
+
+    const api = new API();
+
+    const updateResultList = (results) => {
+      const ul = document.createElement('ul');
+      const result = results.forEach(elem => {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = elem.url;
+        a.innerHTML = elem.label;
+        a.target = '_blank';
+        li.appendChild(a);
+        ul.appendChild(li)
+      });
+      searchResults.replaceChild(ul, searchResults.childNodes[0]);
+    }
+
+    const searchField = document.getElementById('search');
+    const searchResults = document.getElementById('searchresults');
+
+    // Make searchField events an observable so we can subscribe to it's events
+    const searchEvent$ = Rx.Observable.fromEvent(searchField, 'keyup');
+
+    // Goals:
+    // Debounce input by 400ms, so we don't fetch too often
+    // Don't fetch the same data that is already available
+    // Fetch only once user typed min 3 chars
+    // Display only results of latest request no matter of previous
+
+    searchEvent$
+      .debounceTime(400) // Debounce input by 400ms
+      .map(e => e.target.value) // Get value from event
+      .filter(val => val && val.length >= 3) // Only request once enough letters are typed
+      .distinctUntilChanged() // Don't fetch same content if term didn't change
+      // .mergeMap(term => api.suggest(term)) // Doesn't ignore long running requests
+      .switchMap(val => api.suggest(val)) // Ignore results of previous requests and take only latest
+      .subscribe(d => updateResultList(d));
+  </script>
+</body>
+
+</html>
